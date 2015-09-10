@@ -31,7 +31,7 @@
 
 #define __STDC_LIMIT_MACROS
 
-#include "addons/include/xbmc_vis_dll.h"
+//#include "addons/include/xbmc_vis_dll.h"
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
@@ -298,6 +298,10 @@ static void draw_bars(void)
   glPopMatrix();
 }
 
+#define ADDON_STATUS int
+#define ADDON_STATUS_UNKNOWN -1
+#define ADDON_STATUS_NEED_SETTINGS 1
+
 //-- Create -------------------------------------------------------------------
 // Called on load. Addon should fully initalize or return error status
 //-----------------------------------------------------------------------------
@@ -424,7 +428,7 @@ extern "C" void AudioData(const float* pAudioData, int iAudioDataLength, float *
   }
 }
 
-
+#if 0
 //-- GetInfo ------------------------------------------------------------------
 // Tell XBMC our requirements
 //-----------------------------------------------------------------------------
@@ -653,4 +657,10 @@ extern "C" ADDON_STATUS ADDON_SetSetting(const char *strSetting, const void* val
 //-----------------------------------------------------------------------------
 extern "C" void ADDON_Announce(const char *flag, const char *sender, const char *message, const void *data)
 {
+}
+#endif
+
+int main(int argc, char ** argv)
+{
+  return 0;
 }
