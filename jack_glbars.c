@@ -339,26 +339,6 @@ extern "C" void Render()
   glEnable(GL_BLEND);
 }
 
-extern "C" void Start(int iChannels, int iSamplesPerSec, int iBitsPerSample, const char* szSongName)
-{
-  int x, y;
-
-  for(x = 0; x < 16; x++)
-  {
-    for(y = 0; y < 16; y++)
-    {
-      cHeights[y][x] = 0.0;
-    }
-  }
-
-  x_speed = 0.0;
-  y_speed = 0.5;
-  z_speed = 0.0;
-  x_angle = 20.0;
-  y_angle = 45.0;
-  z_angle = 0.0;
-}
-
 extern "C" void AudioData(const float* pAudioData, int iAudioDataLength, float *pFreqData, int iFreqDataLength)
 {
   int i,c;
