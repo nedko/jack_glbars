@@ -29,6 +29,10 @@
  *  Ported to GLES 2.0 by Gimli
  */
 
+/*
+ *  Ported to standalone JACK application by Nedko Arnaudov
+ */
+
 #define __STDC_LIMIT_MACROS
 
 //#include "addons/include/xbmc_vis_dll.h"
@@ -298,42 +302,6 @@ static void draw_bars(void)
   glPopMatrix();
 }
 
-#define ADDON_STATUS int
-#define ADDON_STATUS_UNKNOWN -1
-#define ADDON_STATUS_NEED_SETTINGS 1
-
-//-- Create -------------------------------------------------------------------
-// Called on load. Addon should fully initalize or return error status
-//-----------------------------------------------------------------------------
-ADDON_STATUS ADDON_Create(void* hdl, void* props)
-{
-  if (!props)
-    return ADDON_STATUS_UNKNOWN;
-
-  scale = 1.0 / log(256.0);
-
-#if defined(HAS_GLES)
-  vis_shader = new CVisGUIShader(vert, frag);
-
-  if(!vis_shader)
-    return ADDON_STATUS_UNKNOWN;
-
-  if(!vis_shader->CompileAndLink())
-  {
-    delete vis_shader;
-    return ADDON_STATUS_UNKNOWN;
-  }  
-  m_col = (GLfloat  *)malloc(16*16*3*8 * sizeof(GLfloat *));
-  m_ver = (GLfloat  *)malloc(16*16*3*8 * sizeof(GLfloat *));
-  m_idx = (GLushort *)malloc(16*16*36  * sizeof(GLushort *));
-  init_bars();
-#endif
-
-  scale = 1.0 / log(256.0);
-
-  return ADDON_STATUS_NEED_SETTINGS;
-}
-
 //-- Render -------------------------------------------------------------------
 // Called once per frame. Do all rendering here.
 //-----------------------------------------------------------------------------
@@ -428,74 +396,139 @@ extern "C" void AudioData(const float* pAudioData, int iAudioDataLength, float *
   }
 }
 
-#if 0
-//-- GetInfo ------------------------------------------------------------------
-// Tell XBMC our requirements
-//-----------------------------------------------------------------------------
-extern "C" void GetInfo(VIS_INFO* pInfo)
+#include <GL/gl.h>
+#include <GL/glut.h>
+
+void display(void)
 {
-  pInfo->bWantsFreq = false;
-  pInfo->iSyncDelay = 0;
+  /*  clear all pixels  */
+  glClear(GL_COLOR_BUFFER_BIT);
+  glCullFace(GL_FRONT_AND_BACK);
+  Render();
+  glFlush();
+  glutSwapBuffers();
+  glutTimerFunc(10, (void (*)(int))display, 0);
 }
 
+#include <jack/jack.h>
 
-//-- GetSubModules ------------------------------------------------------------
-// Return any sub modules supported by this vis
-//-----------------------------------------------------------------------------
-extern "C" unsigned int GetSubModules(char ***names)
-{
-  return 0; // this vis supports 0 sub modules
-}
+jack_client_t * jack_client;
+jack_port_t * jack_port;
 
-//-- OnAction -----------------------------------------------------------------
-// Handle XBMC actions such as next preset, lock preset, album art changed etc
-//-----------------------------------------------------------------------------
-extern "C" bool OnAction(long flags, const void *param)
+int
+jack_process_cb(
+  jack_nframes_t nframes,
+  void * context_ptr)
 {
-  bool ret = false;
-  return ret;
-}
+  float * input_buf;
 
-//-- GetPresets ---------------------------------------------------------------
-// Return a list of presets to XBMC for display
-//-----------------------------------------------------------------------------
-extern "C" unsigned int GetPresets(char ***presets)
-{
+  input_buf = (float *)jack_port_get_buffer(jack_port, nframes);
+  AudioData(input_buf, nframes, NULL, 0);
+
   return 0;
 }
 
-//-- GetPreset ----------------------------------------------------------------
-// Return the index of the current playing preset
-//-----------------------------------------------------------------------------
-extern "C" unsigned GetPreset()
+int main(int argc, char ** argv)
 {
-  return 0;
-}
+  jack_client = jack_client_open("jack_gl", JackNullOption, NULL);
+  jack_port = jack_port_register(jack_client, "in", JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput, 0);
+  jack_set_process_callback(jack_client, &jack_process_cb, NULL);
+  jack_activate(jack_client);
 
-//-- IsLocked -----------------------------------------------------------------
-// Returns true if this add-on use settings
-//-----------------------------------------------------------------------------
-extern "C" bool IsLocked()
-{
-  return false;
-}
+  glutInit(&argc, argv);
+  glutInitDisplayMode(GLUT_DOUBLE | GLUT_DEPTH | GLUT_RGBA);
+  glutInitWindowSize(250, 250);
+  glutInitWindowPosition(100, 100);
+  glutCreateWindow("JACK OpenGL bars");
 
-//-- Stop ---------------------------------------------------------------------
-// This dll must cease all runtime activities
-// !!! Add-on master function !!!
-//-----------------------------------------------------------------------------
-extern "C" void ADDON_Stop()
-{
-}
+  /*  select clearing (background) color       */
+  glClearColor(0.0, 0.0, 0.0, 0.0);
 
-//-- Destroy ------------------------------------------------------------------
-// Do everything before unload of this add-on
-// !!! Add-on master function !!!
-//-----------------------------------------------------------------------------
-extern "C" void ADDON_Destroy()
-{
+  /*  initialize viewing values  */
+  glMatrixMode(GL_PROJECTION);
+  glLoadIdentity();
+  glOrtho(0.0, 1.0, 0.0, 1.0, -1.0, 1.0);
+
 #if defined(HAS_GLES)
-  if(vis_shader) 
+  vis_shader = new CVisGUIShader(vert, frag);
+
+  if(!vis_shader)
+    return ADDON_STATUS_UNKNOWN;
+
+  if(!vis_shader->CompileAndLink())
+  {
+    delete vis_shader;
+    return ADDON_STATUS_UNKNOWN;
+  }
+  m_col = (GLfloat  *)malloc(16*16*3*8 * sizeof(GLfloat *));
+  m_ver = (GLfloat  *)malloc(16*16*3*8 * sizeof(GLfloat *));
+  m_idx = (GLushort *)malloc(16*16*36  * sizeof(GLushort *));
+  init_bars();
+#endif
+
+  // Set "Bar Height"
+  scale = 1.f   / log(256.f); // "Default" / standard
+  //scale = 2.f   / log(256.f); // "Big"
+  //scale = 3.f   / log(256.f); // "Very Big" / real big
+  //scale = 0.33f / log(256.f); // unused
+  //scale = 0.5f  / log(256.f); // "Small"
+
+  // Set "Mode"
+#if defined(HAS_GL)
+  //g_mode = GL_FILL;      // "Filled"
+  //g_mode = GL_LINE;      // "Wireframe"
+  //g_mode = GL_POINT;     // "Points"
+#else
+  //g_mode = GL_TRIANGLES; // "Filled"
+  //g_mode = GL_LINE_LOOP; // "Wireframe"
+  //g_mode = GL_LINES;     // "Points" //no points on gles!
+#endif
+
+  // Set "Speed"
+  //hSpeed = 0.025f;          // "Slow"
+  hSpeed = 0.0125f;         // "Default"
+  //hSpeed = 0.1f;            // "Fast"
+  //hSpeed = 0.2f;            // "Very Fast"
+  //hSpeed = 0.05f;           // "Very Slow"
+
+  {
+    int x, y;
+
+    for(x = 0; x < 16; x++)
+    {
+      for(y = 0; y < 16; y++)
+      {
+        cHeights[y][x] = heights[y][x] = 0;
+      }
+    }
+  }
+
+  x_speed = 0.0;
+  y_speed = 0.5;
+  z_speed = 0.0;
+#if 1
+  x_angle = 20.0;
+  y_angle = 15.0;
+  z_angle = 0.0;
+#else
+  x_angle = 0.0;
+  y_angle = 0.0;
+  z_angle = 0.0;
+#endif
+
+  // overrides
+  //g_mode = GL_LINE;
+  //y_speed = 0.0;
+  //z_angle = 10.0;
+  //y_angle = 0.0;
+  //x_angle = 0.0;
+
+  glutDisplayFunc(display);
+
+  glutMainLoop();
+
+#if defined(HAS_GLES)
+  if(vis_shader)
   {
     vis_shader->Free();
     delete vis_shader;
@@ -507,160 +540,6 @@ extern "C" void ADDON_Destroy()
   m_ver = NULL;
   m_idx = NULL;
 #endif
-}
 
-//-- HasSettings --------------------------------------------------------------
-// Returns true if this add-on use settings
-// !!! Add-on master function !!!
-//-----------------------------------------------------------------------------
-extern "C" bool ADDON_HasSettings()
-{
-  return true;
-}
-
-//-- GetStatus ---------------------------------------------------------------
-// Returns the current Status of this visualisation
-// !!! Add-on master function !!!
-//-----------------------------------------------------------------------------
-extern "C" ADDON_STATUS ADDON_GetStatus()
-{
-  return ADDON_STATUS_OK;
-}
-
-//-- GetSettings --------------------------------------------------------------
-// Return the settings for XBMC to display
-// !!! Add-on master function !!!
-//-----------------------------------------------------------------------------
-extern "C" unsigned int ADDON_GetSettings(ADDON_StructSetting ***sSet)
-{
-  return 0;
-}
-
-//-- FreeSettings --------------------------------------------------------------
-// Free the settings struct passed from XBMC
-// !!! Add-on master function !!!
-//-----------------------------------------------------------------------------
-
-extern "C" void ADDON_FreeSettings()
-{
-}
-
-//-- SetSetting ---------------------------------------------------------------
-// Set a specific Setting value (called from XBMC)
-// !!! Add-on master function !!!
-//-----------------------------------------------------------------------------
-extern "C" ADDON_STATUS ADDON_SetSetting(const char *strSetting, const void* value)
-{
-  if (!strSetting || !value)
-    return ADDON_STATUS_UNKNOWN;
-
-  if (strcmp(strSetting, "bar_height")==0)
-  {
-    switch (*(int*) value)
-    {
-    case 1://standard
-      scale = 1.f / log(256.f);
-      break;
-
-    case 2://big
-      scale = 2.f / log(256.f);
-      break;
-
-    case 3://real big
-      scale = 3.f / log(256.f);
-      break;
-
-    case 4://unused
-      scale = 0.33f / log(256.f);
-      break;
-
-    case 0://small
-    default:
-      scale = 0.5f / log(256.f);
-      break;
-    }
-    return ADDON_STATUS_OK;
-  }
-  else if (strcmp(strSetting, "speed")==0)
-  {
-    switch (*(int*) value)
-    {
-    case 1:
-      hSpeed = 0.025f;
-      break;
-
-    case 2:
-      hSpeed = 0.0125f;
-      break;
-
-    case 3:
-      hSpeed = 0.1f;
-      break;
-
-    case 4:
-      hSpeed = 0.2f;
-      break;
-
-    case 0:
-    default:
-      hSpeed = 0.05f;
-      break;
-    }
-    return ADDON_STATUS_OK;
-  }
-  else if (strcmp(strSetting, "mode")==0)
-  {
-#if defined(HAS_GL)
-    switch (*(int*) value)
-    {
-      case 1:
-        g_mode = GL_LINE;
-        break;
-
-      case 2:
-        g_mode = GL_POINT;
-        break;
-
-      case 0:
-      default:
-        g_mode = GL_FILL;
-        break;
-    }
-#else
-    switch (*(int*) value)
-    {
-      case 1:
-        g_mode = GL_LINE_LOOP;
-        break;
-
-      case 2:
-        g_mode = GL_LINES; //no points on gles!
-        break;
-
-      case 0:
-      default:
-        g_mode = GL_TRIANGLES;
-        break;
-    }
-
-#endif
-
-    return ADDON_STATUS_OK;
-  }
-
-  return ADDON_STATUS_UNKNOWN;
-}
-
-//-- Announce -----------------------------------------------------------------
-// Receive announcements from XBMC
-// !!! Add-on master function !!!
-//-----------------------------------------------------------------------------
-extern "C" void ADDON_Announce(const char *flag, const char *sender, const char *message, const void *data)
-{
-}
-#endif
-
-int main(int argc, char ** argv)
-{
   return 0;
 }
