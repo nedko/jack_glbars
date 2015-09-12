@@ -1,6 +1,6 @@
-jack_glspectrum: Makefile opengl_spectrum.cpp
-	g++ -g -Wall -Werror -lGL -lglut -ljack -DHAS_GL opengl_spectrum.cpp -o jack_glspectrum
+jack_glbars: Makefile jack_glbars.c
+	g++ -g -Wall -Werror -lGL -lglut -ljack -DHAS_GL jack_glbars.c -o jack_glbars
 
 .PHONY: clean
 clean:
-	rm -v jack_glspectrum
+	rm -v jack_glbars
