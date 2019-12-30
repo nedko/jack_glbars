@@ -8,4 +8,4 @@ Run make and sudo make install inside the cloned directory
 
 ### Usage
 
-start the program with jack_glabars and connect the output of the client to visualize to jack_gl:in
+Start the program with jack_glabars and connect the output of the client to visualize to jack_gl:in
